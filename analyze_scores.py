@@ -7,6 +7,7 @@ import argparse
 import colorsys
 import json
 import math
+import plistlib
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -52,8 +53,17 @@ def detail_value(row, label: str) -> str:
     return ""
 
 
+def read_html_bytes(path: Path) -> bytes:
+    """Read HTML bytes from a .html or .webarchive (Safari) file."""
+    raw = path.read_bytes()
+    if path.suffix.lower() == ".webarchive":
+        plist = plistlib.loads(raw)
+        return plist["WebMainResource"]["WebResourceData"]
+    return raw
+
+
 def parse_html(path: Path) -> list[Course]:
-    root = html.fromstring(path.read_bytes())
+    root = html.fromstring(read_html_bytes(path))
     courses: list[Course] = []
     blocks = root.xpath("//div[contains(concat(' ',normalize-space(@class),' '),' semester-block ')]")
     for block in blocks:
@@ -331,7 +341,7 @@ def render(courses: list[Course], output: Path, width: int = 1800) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="解析北大树洞成绩 HTML，并生成学分加权课程成绩图谱。")
-    parser.add_argument("html", type=Path, help="从成绩页面保存的 HTML 文件")
+    parser.add_argument("html", type=Path, help="从成绩页面保存的 HTML 或 Safari WebArchive (.webarchive) 文件")
     parser.add_argument("-o", "--output", type=Path, default=Path("score-analysis.png"), help="输出 PNG 路径")
     parser.add_argument("--semester", help="只绘制指定学期（如 24-25学年度2学期）")
     parser.add_argument("--json", type=Path, help="同时导出结构化课程 JSON")

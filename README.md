@@ -1,5 +1,28 @@
 # PKUCourseOrbit
 
+纯前端网站会在浏览器本地解析北大树洞成绩 HTML，文件不会上传到服务器。项目同时保留 Python 命令行脚本。
+
+## 网站
+
+无需构建步骤，直接用静态服务器运行：
+
+```bash
+python3 -m http.server 8000
+```
+
+然后访问 `http://localhost:8000`，选择保存好的成绩 HTML，即可预览并下载 PNG。
+
+### 部署到 Cloudflare Pages
+
+1. 将项目推送到 GitHub 或 GitLab，确认个人成绩 HTML 和生成图片没有提交。
+2. 在 Cloudflare Dashboard 选择 **Workers & Pages → Create → Pages → Connect to Git**。
+3. Framework preset 选择 **None**，Build command 留空，Build output directory 填 `.`。
+4. 部署后访问 Cloudflare 提供的 `*.pages.dev` 地址。
+
+`_headers` 已包含适用于静态站点的安全和隐私响应头。
+
+## Python 命令行脚本
+
 从北大树洞成绩页面保存的 HTML 中提取课程，并生成一张课程成绩图谱：
 
 - 使用圆形气泡布局，每门课程的圆面积与学分成正比。

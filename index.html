@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="在浏览器本地解析北大树洞成绩 HTML，生成 CourseOrbit 课程成绩星环图。">
+  <title>CourseOrbit · 课迹星环</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="shell">
+    <header class="site-header">
+      <a class="brand" href="./" aria-label="CourseOrbit 首页">
+        <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+        <span>CourseOrbit</span>
+        <small>课迹星环</small>
+      </a>
+      <p class="privacy"><span aria-hidden="true">◉</span> 文件仅在浏览器本地处理</p>
+    </header>
+
+    <section class="intro" aria-labelledby="page-title">
+      <p class="eyebrow">你的课程宇宙</p>
+      <h1 id="page-title">让每一门课，找到自己的轨道。</h1>
+      <p class="lead">导入北大树洞成绩页面，按课程类型与学分排布，以颜色呈现成绩。</p>
+    </section>
+
+    <section id="upload-panel" class="upload-panel" aria-labelledby="upload-title">
+      <div class="orbit-art" aria-hidden="true">
+        <span class="orbit orbit-one"></span>
+        <span class="orbit orbit-two"></span>
+        <span class="planet"></span>
+      </div>
+      <div>
+        <h2 id="upload-title">导入成绩页面</h2>
+        <p>在树洞成绩页选择“网页，全部”保存，然后上传 HTML 文件。</p>
+      </div>
+      <label class="file-button" for="html-file">选择 HTML 文件</label>
+      <input id="html-file" type="file" accept=".html,.htm,text/html">
+      <p id="drop-hint" class="drop-hint">也可以将文件拖到这里</p>
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+    </section>
+
+    <section id="result" class="result" hidden aria-labelledby="result-title">
+      <div class="result-bar">
+        <div>
+          <p class="eyebrow">生成结果</p>
+          <h2 id="result-title">课程成绩图谱</h2>
+        </div>
+        <div class="actions">
+          <label for="semester">学期</label>
+          <select id="semester"></select>
+          <button id="download" type="button">下载 PNG</button>
+        </div>
+      </div>
+      <div class="canvas-wrap">
+        <canvas id="orbit-canvas" width="1800" height="1800" role="img" aria-label="课程成绩圆形气泡图"></canvas>
+      </div>
+      <p id="summary" class="summary"></p>
+      <ul id="accessible-courses" class="sr-only"></ul>
+    </section>
+  </main>
+  <footer>
+    <p>CourseOrbit 不会上传、保存或分享你的成绩文件。</p>
+  </footer>
+  <script src="app.js"></script>
+</body>
+</html>

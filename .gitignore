@@ -1,2 +1,10 @@
-score-analysis.png
+__pycache__/
+*.pyc
+.DS_Store
+
+# Personal grade data and locally generated outputs
 北大树洞.html
+courses.json
+score-analysis.png
+semester-sample.png
+*.html.html

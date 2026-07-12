@@ -8,3 +8,10 @@ courses.json
 score-analysis.png
 semester-sample.png
 *.html.html
+
+# wrangler files
+.wrangler
+.dev.vars*
+!.dev.vars.example
+.env*
+!.env.example

@@ -35,11 +35,16 @@ function detailValue(row, label) {
 
 function parseWebArchive(buffer) {
   const bytes = new Uint8Array(buffer);
-  // Check for binary plist magic: "bplist00"
+  // Binary plist (bplist00) — not supported in browser JS.
+  // Safari's "存储为 → 页面归档" produces this format.
   if (bytes[0] === 0x62 && bytes[1] === 0x70 && bytes[2] === 0x6c) {
-    return extractHtmlFromBinaryPlist(bytes);
+    throw new Error(
+      "Safari .webarchive（二进制格式）网页版暂不支持解析。请改用以下方式：\n" +
+      "1）Safari「文件 → 存储为…」格式选择「页面源码」保存为 .html；或\n" +
+      "2）使用命令行：python3 analyze_scores.py 你的文件.webarchive"
+    );
   }
-  // XML plist fallback
+  // Try XML plist fallback
   const text = new TextDecoder().decode(bytes);
   if (text.includes("<plist")) {
     return extractHtmlFromXmlPlist(text);
@@ -62,158 +67,7 @@ function extractHtmlFromXmlPlist(text) {
       }
     }
   }
-  throw new Error("无法从 XML plist 中提取 HTML 数据。");
-}
-
-function extractHtmlFromBinaryPlist(bytes) {
-  // bplist00 format: objects table at start, trailer at end (26 bytes)
-  // We need to find the data blob associated with "WebResourceData".
-  // Strategy: scan the raw bytes for the UTF-16BE string "WebResourceData" (the key),
-  // then the next <data> blob after it is our HTML payload.
-  // This is a targeted extraction, not a general plist parser.
-
-  const trailer = bytes.length - 26;
-  const offsetIntSize = bytes[trailer + 6];
-  const objectRefSize = bytes[trailer + 7];
-  const numObjects = readUint(bytes, trailer + 8, 8);
-  const offsetTableStart = readUint(bytes, trailer + 24, 8);
-
-  // Read all object offsets
-  const objOffsets = [];
-  for (let i = 0; i < numObjects; i++) {
-    objOffsets.push(readUint(bytes, offsetTableStart + i * offsetIntSize, offsetIntSize));
-  }
-
-  // Helper: read object at a given offset, returning { type, value, endOffset }
-  function readObjectAt(pos) {
-    const typeByte = bytes[pos];
-    const lo = typeByte & 0x0f;
-
-    // Null / bool
-    if (typeByte === 0x00) return { value: null, end: pos + 1 };
-    if (typeByte === 0x08) return { value: false, end: pos + 1 };
-    if (typeByte === 0x09) return { value: true, end: pos + 1 };
-
-    // Int
-    if (typeByte === 0x10) return { value: bytes[pos + 1], end: pos + 2 };
-    if (typeByte === 0x11) return { value: readUint(bytes, pos + 1, 2), end: pos + 3 };
-    if (typeByte === 0x12) return { value: readUint(bytes, pos + 1, 4), end: pos + 5 };
-    if (typeByte === 0x13) return { value: readUint(bytes, pos + 1, 8), end: pos + 9 };
-
-    // Variable-length int
-    if ((typeByte & 0xf0) === 0x10) {
-      const size = 1 << lo;
-      return { value: readUint(bytes, pos + 1, size), end: pos + 1 + size };
-    }
-
-    // Data blob
-    if (typeByte === 0xd0) {
-      const len = lo;
-      return { value: bytes.slice(pos + 1, pos + 1 + len), end: pos + 1 + len };
-    }
-    if (typeByte === 0xd1) {
-      const lenSize = lo;
-      const len = readUint(bytes, pos + 1, lenSize);
-      const dataStart = pos + 1 + lenSize;
-      return { value: bytes.slice(dataStart, dataStart + len), end: dataStart + len };
-    }
-    if ((typeByte & 0xf0) === 0xd0) {
-      const lenSize = typeByte & 0x0f;
-      const len = readUint(bytes, pos + 1, lenSize);
-      const dataStart = pos + 1 + lenSize;
-      return { value: bytes.slice(dataStart, dataStart + len), end: dataStart + len };
-    }
-
-    // ASCII string
-    if (typeByte === 0x50) {
-      const len = lo;
-      return { value: String.fromCharCode(...bytes.slice(pos + 1, pos + 1 + len)), end: pos + 1 + len };
-    }
-    if ((typeByte & 0xf0) === 0x50 && typeByte !== 0x50) {
-      const lenSize = typeByte & 0x0f;
-      const len = readUint(bytes, pos + 1, lenSize);
-      const strStart = pos + 1 + lenSize;
-      return { value: String.fromCharCode(...bytes.slice(strStart, strStart + len)), end: strStart + len };
-    }
-    if (typeByte === 0x5f) {
-      const lenSize = lo || 1;
-      const len = readUint(bytes, pos + 1, lenSize);
-      const strStart = pos + 1 + lenSize;
-      return { value: String.fromCharCode(...bytes.slice(strStart, strStart + len)), end: strStart + len };
-    }
-
-    // Short ASCII string (type 0x70-0x7f)
-    if ((typeByte & 0xf0) === 0x70 && typeByte <= 0x7f) {
-      const len = typeByte === 0x70 ? bytes[pos + 1] : lo;
-      const strStart = typeByte === 0x70 ? pos + 2 : pos + 1;
-      return { value: String.fromCharCode(...bytes.slice(strStart, strStart + len)), end: strStart + len };
-    }
-
-    // Dict
-    if ((typeByte & 0xf0) === 0xd0 || (typeByte & 0xf0) === 0xc0) {
-      // For our targeted approach, we don't need to fully parse dicts
-      return { value: null, end: pos + 1 };
-    }
-
-    // Array
-    if ((typeByte & 0xf0) === 0xa0) {
-      return { value: null, end: pos + 1 };
-    }
-
-    return { value: null, end: pos + 1 };
-  }
-
-  // Scan object table for the "WebResourceData" string, then find the next data blob
-  for (let i = 0; i < numObjects; i++) {
-    const pos = objOffsets[i];
-    if (pos >= bytes.length) continue;
-    const typeByte = bytes[pos];
-
-    // Check if this is an ASCII string containing "WebResourceData"
-    let str = null;
-    if (typeByte === 0x50) {
-      const len = bytes[pos] & 0x0f;
-      str = String.fromCharCode(...bytes.slice(pos + 1, pos + 1 + len));
-    } else if ((typeByte & 0xf0) === 0x50 && typeByte !== 0x50) {
-      const lenSize = typeByte & 0x0f;
-      const len = readUint(bytes, pos + 1, lenSize);
-      const strStart = pos + 1 + lenSize;
-      str = String.fromCharCode(...bytes.slice(strStart, strStart + len));
-    } else if (typeByte === 0x5f) {
-      const lenSize = (typeByte & 0x0f) || 1;
-      const len = readUint(bytes, pos + 1, lenSize);
-      const strStart = pos + 1 + lenSize;
-      str = String.fromCharCode(...bytes.slice(strStart, strStart + len));
-    }
-
-    if (str === "WebResourceData") {
-      // The value is the next object after this key in the dict.
-      // In a bplist dict, keys and values alternate: key0, val0, key1, val1, ...
-      // For a flat dict with N keys, the object table is: key0, key1, ..., val0, val1, ...
-      // But webarchive dicts are small and typically ordered.
-      // Easiest: the data blob is the next object in the table that is a data type.
-      for (let j = i + 1; j < numObjects; j++) {
-        const vPos = objOffsets[j];
-        if (vPos >= bytes.length) continue;
-        const vType = bytes[vPos];
-        // data type: 0xDx
-        if ((vType & 0xf0) === 0xd0) {
-          const obj = readObjectAt(vPos);
-          if (obj.value instanceof Uint8Array) {
-            return new TextDecoder().decode(obj.value);
-          }
-        }
-      }
-    }
-  }
-
-  throw new Error("无法从二进制 plist 中提取 WebResourceData。");
-}
-
-function readUint(bytes, offset, size) {
-  let v = 0;
-  for (let i = 0; i < size; i++) v = (v << 8) | bytes[offset + i];
-  return v;
+  throw new Error("无法从 .webarchive 中提取 HTML 数据。");
 }
 
 function parseGrades(source) {

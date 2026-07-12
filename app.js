@@ -29,10 +29,6 @@ function detailValue(row, label) {
   return "";
 }
 
-// ---- Safari .webarchive (binary plist) minimal extractor ----
-// Only extracts the first <data> blob after the "WebResourceData" key from a bplist00.
-// This is intentionally minimal – a full plist parser is not needed for webarchives.
-
 // ---- Safari .webarchive support ----
 // Binary plists store the main HTML as raw UTF-8 within a packed string object.
 // We locate it by scanning for <!DOCTYPE html> → </html> directly in the bytes.

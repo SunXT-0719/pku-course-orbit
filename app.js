@@ -33,23 +33,49 @@ function detailValue(row, label) {
 // Only extracts the first <data> blob after the "WebResourceData" key from a bplist00.
 // This is intentionally minimal – a full plist parser is not needed for webarchives.
 
+// ---- Safari .webarchive support ----
+// Binary plists store the main HTML as raw UTF-8 within a packed string object.
+// We locate it by scanning for <!DOCTYPE html> → </html> directly in the bytes.
+
 function parseWebArchive(buffer) {
   const bytes = new Uint8Array(buffer);
-  // Binary plist (bplist00) — not supported in browser JS.
-  // Safari's "存储为 → 页面归档" produces this format.
+  // Binary plist (bplist00)?
   if (bytes[0] === 0x62 && bytes[1] === 0x70 && bytes[2] === 0x6c) {
-    throw new Error(
-      "Safari .webarchive（二进制格式）网页版暂不支持解析。请改用以下方式：\n" +
-      "1）Safari「文件 → 存储为…」格式选择「页面源码」保存为 .html；或\n" +
-      "2）使用命令行：python3 analyze_scores.py 你的文件.webarchive"
-    );
+    return extractHtmlFromBytes(bytes);
   }
-  // Try XML plist fallback
+  // XML plist fallback
   const text = new TextDecoder().decode(bytes);
   if (text.includes("<plist")) {
     return extractHtmlFromXmlPlist(text);
   }
   throw new Error("不支持的 .webarchive 格式。");
+}
+
+function extractHtmlFromBytes(bytes) {
+  // Find <!DOCTYPE html in raw bytes
+  const needle = new TextEncoder().encode("<!DOCTYPE html");
+  let start = -1;
+  for (let i = 0; i <= bytes.length - needle.length; i++) {
+    let match = true;
+    for (let j = 0; j < needle.length; j++) {
+      if (bytes[i + j] !== needle[j]) { match = false; break; }
+    }
+    if (match) { start = i; break; }
+  }
+  if (start === -1) {
+    throw new Error("无法在 .webarchive 中找到 HTML 内容。请确认页面已完全加载后再保存归档。");
+  }
+
+  // Decode the chunk from <!DOCTYPE html onward (10 MB max)
+  const maxLen = Math.min(bytes.length - start, 10 * 1024 * 1024);
+  const chunk = new TextDecoder().decode(bytes.slice(start, start + maxLen));
+
+  // The trailing plist metadata sits after </html>; slice it off
+  const endIdx = chunk.lastIndexOf("</html>");
+  if (endIdx === -1) {
+    throw new Error("无法在 .webarchive 中找到 HTML 结束标记。");
+  }
+  return chunk.slice(0, endIdx + "</html>".length);
 }
 
 function extractHtmlFromXmlPlist(text) {
@@ -61,9 +87,9 @@ function extractHtmlFromXmlPlist(text) {
       if (dataEl && dataEl.tagName === "data") {
         const base64 = dataEl.textContent.replace(/\s+/g, "");
         const binary = atob(base64);
-        const bytes = new Uint8Array(binary.length);
-        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-        return new TextDecoder().decode(bytes);
+        const out = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
+        return new TextDecoder().decode(out);
       }
     }
   }

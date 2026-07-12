@@ -245,7 +245,7 @@ async function loadFile(file) {
     allCourses = parseGrades(await file.text());
     populateSemesters(allCourses);
     renderSelection();
-    statusNode.textContent = `已读取 ${allCourses.length} 门课程。文件没有上传到服务器。`;
+    statusNode.textContent = `已读取 ${allCourses.length} 门课程。`;
     resultSection.hidden = false;
     resultSection.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
   } catch (error) {
